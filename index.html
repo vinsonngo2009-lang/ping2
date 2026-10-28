@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ping</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Onest:wght@400;500;600&display=swap">
+<style>
+/* Layout: two-pane messenger. Rooms rail on the left, conversation on the right; on phones one pane at a time. */
+:root {
+  --bg: #eef1f4;
+  --pane: #ffffff;
+  --rail: #16222e;
+  --rail-ink: #dce6ef;
+  --rail-dim: #8aa0b4;
+  --ink: #18212b;
+  --dim: #6b7785;
+  --line: #dde3ea;
+  --bubble: #eef2f6;
+  --accent: #ff5d3b;
+  --ok: #2fb67c;
+  --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --body: "Onest", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f151b; --pane: #151d25; --rail: #0b1117; --rail-ink: #dce6ef; --rail-dim: #7d92a6; --ink: #e6edf3; --dim: #8d9aa8; --line: #24303b; --bubble: #212c37; color-scheme: dark; }
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { height: 100%; display: grid; grid-template-columns: 300px minmax(0, 1fr); }
+/* Rail */
+.rail { background: var(--rail); color: var(--rail-ink); display: flex; flex-direction: column; min-height: 0; padding-top: env(safe-area-inset-top, 0px); padding-left: env(safe-area-inset-left, 0px); }
+.brand { display: flex; align-items: center; justify-content: space-between; padding: 18px 16px 12px; }
+.logo { font-family: var(--display); font-weight: 700; font-size: 26px; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; }
+.logo i { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(255,93,59,0.25); display: inline-block; }
+.me { display: flex; align-items: center; gap: 8px; background: none; border: 0; color: var(--rail-dim); font-size: 13px; padding: 4px 6px; border-radius: 8px; }
+.me:hover { background: rgba(255,255,255,0.06); color: var(--rail-ink); }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.railact { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 16px 12px; }
+.railact button { background: rgba(255,255,255,0.08); border: 0; color: var(--rail-ink); padding: 9px 10px; border-radius: 10px; font-weight: 600; font-size: 13px; }
+.railact button:hover { background: rgba(255,255,255,0.14); }
+.rooms { flex: 1; overflow-y: auto; padding: 4px 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.room { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; text-align: left; background: none; border: 0; color: var(--rail-ink); padding: 10px 8px; border-radius: 12px; }
+.room:hover { background: rgba(255,255,255,0.05); }
+.room.on { background: rgba(255,255,255,0.1); }
+.badge { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-family: var(--display); font-size: 12px; font-weight: 700; color: #fff; letter-spacing: 0.02em; }
+.room b { display: block; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.room small { display: block; color: var(--rail-dim); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unread { background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; min-width: 20px; height: 20px; border-radius: 10px; display: grid; place-items: center; padding: 0 6px; font-variant-numeric: tabular-nums; }
+.railfoot { padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)); font-size: 12px; color: var(--rail-dim); line-height: 1.45; border-top: 1px solid rgba(255,255,255,0.06); }
+
+/* Conversation */
+.convo { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--pane); padding-top: env(safe-area-inset-top, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.head { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); min-height: 64px; }
+.back { display: none; background: none; border: 0; font-size: 22px; padding: 4px 8px; border-radius: 8px; color: var(--ink); }
+.head h2 { margin: 0; font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: 0.04em; }
+.head .sub { font-size: 12.5px; color: var(--dim); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.head .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.status { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
+.status.wait { background: #e0a43a; }
+.status.off { background: #c9473a; }
+.mode { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--bubble); color: var(--dim); }
+.hbtn { background: var(--bubble); border: 0; padding: 8px 12px; border-radius: 10px; font-weight: 600; font-size: 13px; white-space: nowrap; }
+.hbtn:hover { filter: brightness(0.96); }
+.people { display: flex; }
+.people span { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--pane); margin-left: -6px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; }
+
+.msgs { flex: 1; overflow-y: auto; padding: 18px 18px 8px; display: flex; flex-direction: column; gap: 2px; overscroll-behavior: contain; }
+.day { align-self: center; font-size: 11.5px; font-weight: 600; color: var(--dim); background: var(--bubble); padding: 4px 10px; border-radius: 99px; margin: 14px 0 8px; }
+.sys { align-self: center; font-size: 12.5px; color: var(--dim); margin: 6px 0; text-align: center; }
+.group { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; max-width: min(78%, 560px); align-self: flex-start; }
+.group.mine { align-self: flex-end; align-items: flex-end; }
+.who { font-size: 12px; font-weight: 600; margin: 0 0 2px 12px; }
+.bub { padding: 8px 13px; border-radius: 18px; background: var(--bubble); line-height: 1.4; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; min-width: 0; }
+.group:not(.mine) .bub { border-bottom-left-radius: 6px; }
+.group.mine .bub { color: #fff; border-bottom-right-radius: 6px; }
+.bub.big { font-size: 34px; line-height: 1.15; background: transparent !important; padding: 2px 4px; }
+.bub.pending { opacity: 0.55; }
+.time { font-size: 11px; color: var(--dim); margin: 2px 10px 0; font-variant-numeric: tabular-nums; }
+.empty { margin: auto; text-align: center; color: var(--dim); max-width: 34ch; line-height: 1.5; }
+.empty h3 { font-family: var(--display); color: var(--ink); font-size: 20px; margin: 0 0 6px; }
+.empty .code { font-family: var(--display); font-size: 40px; letter-spacing: 0.12em; color: var(--accent); display: block; margin: 8px 0; }
+.typing { min-height: 22px; padding: 0 22px 4px; font-size: 12.5px; color: var(--dim); }
+.typing i { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--dim); margin-right: 2px; animation: blink 1.2s infinite; }
+.typing i:nth-child(2) { animation-delay: 0.2s; } .typing i:nth-child(3) { animation-delay: 0.4s; margin-right: 6px; }
+@keyframes blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+
+.composer { display: flex; align-items: flex-end; gap: 8px; padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); position: relative; }
+.composer textarea { flex: 1; min-width: 0; resize: none; border: 1px solid var(--line); background: var(--bg); border-radius: 20px; padding: 10px 16px; max-height: 140px; line-height: 1.35; }
+.ibtn { width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--bubble); font-size: 20px; flex: none; display: grid; place-items: center; }
+.send { background: var(--accent); color: #fff; font-size: 18px; }
+.send:disabled { opacity: 0.4; cursor: default; }
+.emojis { position: absolute; bottom: calc(100% + 6px); left: 14px; background: var(--pane); border: 1px solid var(--line); border-radius: 16px; padding: 8px; display: grid; grid-template-columns: repeat(8, 36px); gap: 2px; box-shadow: 0 12px 40px rgba(0,0,0,0.18); z-index: 5; }
+.emojis button { background: none; border: 0; font-size: 22px; width: 36px; height: 36px; border-radius: 8px; }
+.emojis button:hover { background: var(--bubble); }
+.notice { margin: 0 14px 8px; font-size: 12.5px; color: #b0392d; }
+.bub.img { padding: 0; background: transparent !important; overflow: hidden; border-radius: 16px; }
+.bub.img img { display: block; max-width: min(280px, 100%); max-height: 320px; border-radius: 16px; cursor: zoom-in; background: var(--bubble); }
+.fcard { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-width: min(260px, 70vw); }
+.fcard .ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: rgba(255,255,255,0.25); font-size: 18px; }
+.group:not(.mine) .fcard .ic { background: var(--pane); }
+.fcard b { display: block; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcard small { display: block; font-size: 12px; opacity: 0.75; }
+.fcard a { font-weight: 600; font-size: 13px; color: inherit; text-decoration: none; padding: 6px 10px; border-radius: 9px; background: rgba(0,0,0,0.12); white-space: nowrap; }
+.fcard a:hover { background: rgba(0,0,0,0.2); }
+.bar { height: 4px; border-radius: 2px; background: rgba(0,0,0,0.12); margin-top: 6px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: currentColor; opacity: 0.6; }
+.drop { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; background: rgba(255,93,59,0.12); border: 3px dashed var(--accent); border-radius: 12px; font-family: var(--display); font-size: 20px; color: var(--accent); pointer-events: none; }
+.convo { position: relative; }
+
+/* Dialogs */
+.veil { position: fixed; inset: 0; background: rgba(10,16,22,0.55); display: grid; place-items: center; z-index: 10; padding: 20px max(16px, env(safe-area-inset-right, 0px)) 20px max(16px, env(safe-area-inset-left, 0px)); overflow-y: auto; }
+.card { background: var(--pane); width: 100%; max-width: 420px; border-radius: 22px; padding: 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 30px 80px rgba(0,0,0,0.35); }
+.card h1 { margin: 0; font-family: var(--display); font-size: 30px; letter-spacing: -0.02em; display: flex; align-items: center; gap: 10px; }
+.card h1 i { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 5px rgba(255,93,59,0.25); }
+.card h2 { margin: 0; font-family: var(--display); font-size: 20px; }
+.card p { margin: 0; color: var(--dim); line-height: 1.5; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 12px; font-weight: 600; color: var(--dim); }
+.field input { border: 1px solid var(--line); background: var(--bg); border-radius: 12px; padding: 11px 14px; width: 100%; }
+.field input.code { font-family: var(--display); letter-spacing: 0.25em; text-transform: uppercase; font-size: 20px; text-align: center; }
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.sw { width: 32px; height: 32px; border-radius: 50%; border: 3px solid transparent; padding: 0; }
+.sw[aria-pressed="true"] { border-color: var(--ink); }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row > * { flex: 1 1 140px; }
+.pbtn { background: var(--accent); color: #fff; border: 0; border-radius: 12px; padding: 12px 16px; font-weight: 600; }
+.pbtn:hover { filter: brightness(1.05); }
+.gbtn { background: var(--bubble); border: 0; border-radius: 12px; padding: 12px 16px; font-weight: 600; }
+.err { color: #b0392d; font-size: 13px; min-height: 1em; margin: 0; }
+.toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--pane); padding: 10px 16px; border-radius: 12px; font-size: 13.5px; z-index: 20; max-width: calc(100% - 32px); }
+
+@media (max-width: 720px) {
+  .app { grid-template-columns: 1fr; }
+  .app.inroom .rail { display: none; }
+  .app:not(.inroom) .convo { display: none; }
+  .back { display: block; }
+  .head { padding: 10px 12px; }
+  .msgs { padding: 14px 12px 8px; }
+  .group { max-width: 86%; }
+  .people { display: none; }
+  .emojis { grid-template-columns: repeat(6, 36px); }
+}
+@media (prefers-reduced-motion: reduce) { .typing i { animation: none; opacity: 0.6; } }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" onerror="var s=document.createElement('script');s.src='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';document.head.appendChild(s);"></script>
+<script>
+/* ===================== OPTIONAL: SAVED HISTORY =====================
+   Leave this as null for live chat (messages last while someone is in the room).
+   To save messages, make a free Firebase project with a Realtime Database and
+   paste its config object here, for example:
+
+   const FIREBASE_CONFIG = {
+     apiKey: "AIza...",
+     authDomain: "your-project.firebaseapp.com",
+     databaseURL: "https://your-project-default-rtdb.firebaseio.com",
+     projectId: "your-project",
+     appId: "1:123:web:abc"
+   };
+   ================================================================== */
+const FIREBASE_CONFIG = null;
+</script>
+</head>
+<body>
+
+<div class="app" id="app">
+  <aside class="rail">
+    <div class="brand">
+      <div class="logo"><i></i>Ping</div>
+      <button class="me" type="button" id="meBtn" title="Change your name or color"><span class="dot" id="meDot"></span><span id="meName">You</span></button>
+    </div>
+    <div class="railact">
+      <button type="button" id="newBtn">New room</button>
+      <button type="button" id="joinBtn">Join room</button>
+    </div>
+    <nav class="rooms" id="rooms" aria-label="Your rooms"></nav>
+    <div class="railfoot" id="railFoot"></div>
+  </aside>
+
+  <main class="convo">
+    <header class="head">
+      <button class="back" type="button" id="backBtn" aria-label="Back to rooms">‹</button>
+      <div class="grow">
+        <h2 id="roomTitle">—</h2>
+        <div class="sub"><span class="status" id="statusDot"></span><span id="statusText">Connecting…</span><span class="mode" id="modeTag">Live</span></div>
+      </div>
+      <div class="people" id="people"></div>
+      <button class="hbtn" type="button" id="inviteBtn">Invite</button>
+      <button class="hbtn" type="button" id="leaveBtn">Leave</button>
+    </header>
+    <div class="msgs" id="msgs" aria-live="polite"></div>
+    <div class="drop" id="dropHint" hidden>Drop to send</div>
+    <div class="typing" id="typing"></div>
+    <p class="notice" id="notice" hidden></p>
+    <form class="composer" id="composer" autocomplete="off">
+      <div class="emojis" id="emojis" hidden></div>
+      <button class="ibtn" type="button" id="emojiBtn" aria-label="Emoji">☺</button>
+      <button class="ibtn" type="button" id="attachBtn" aria-label="Send a file or photo" title="Send a file or photo">📎</button>
+      <input type="file" id="fileIn" multiple hidden>
+      <textarea id="input" rows="1" maxlength="500" placeholder="Message"></textarea>
+      <button class="ibtn send" type="submit" id="sendBtn" aria-label="Send" disabled>➤</button>
+    </form>
+  </main>
+</div>
+
+<!-- Welcome / profile -->
+<div class="veil" id="welcome" hidden>
+  <form class="card" id="welcomeForm">
+    <h1><i></i>Ping</h1>
+    <p id="welcomeText">Chat rooms for you and your friends. Pick a name, then make a room and share its code.</p>
+    <div class="field"><label for="nameIn">Your name</label><input id="nameIn" maxlength="20" autocomplete="off" required></div>
+    <div class="field"><label>Your color</label><div class="swatches" id="swatches"></div></div>
+    <p class="err" id="welcomeErr"></p>
+    <button class="pbtn" type="submit" id="welcomeGo">Continue</button>
+  </form>
+</div>
+
+<!-- Join -->
+<div class="veil" id="joinDlg" hidden>
+  <form class="card" id="joinForm">
+    <h2>Join a room</h2>
+    <p>Type the 4-letter code your friend sent you.</p>
+    <div class="field"><label for="codeIn">Room code</label><input id="codeIn" class="code" maxlength="4" autocomplete="off" placeholder="ABCD"></div>
+    <p class="err" id="joinErr"></p>
+    <div class="row"><button class="gbtn" type="button" id="joinCancel">Cancel</button><button class="pbtn" type="submit">Join</button></div>
+  </form>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const COLORS = ["#ff5d3b", "#2f7de1", "#2fb67c", "#a35be8", "#e8a32c", "#e0457b", "#1fa7b8", "#6b7a8f"];
+const EMOJI = ["😂", "😭", "💀", "🔥", "❤️", "👍", "👀", "🙏", "😎", "🤔", "😡", "🥶", "🎉", "💯", "✅", "❌", "🤝", "🫡", "😴", "🤯", "🍕", "🏀", "🎮", "📚"];
+const PREFIX = "pingchat-v1-";
+const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const MAXLEN = 500;
+const LIVE_FILE_MAX = 5 * 1024 * 1024, SAVED_FILE_MAX = 1024 * 1024, CHUNK = 60000;
+const IMG_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+const cleanFileName = s => String(s || "").replace(BAD, "").replace(/[\\/:*?"<>|]/g, "_").trim().slice(0, 100) || "file";
+function fmtSize(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(0) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
+function normFile(f) { if (!f || typeof f !== "object") return null; return { fid: String(f.fid || "").slice(0, 24), name: cleanFileName(f.name), size: Math.max(0, Number(f.size) || 0), mime: String(f.mime || "").slice(0, 80) }; }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- storage ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("ping-" + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("ping-" + k, JSON.stringify(v)); } catch (e) {} }
+};
+function rid(n = 10) { const a = "abcdefghijkmnopqrstuvwxyz23456789"; let s = ""; for (let i = 0; i < n; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
+const BAD = new RegExp("[" + [[0, 8], [11, 12], [14, 31], [127, 159], [173, 173], [8203, 8207], [8232, 8238], [8288, 8303], [65279, 65279]].map(r => String.fromCharCode(r[0]) + "-" + String.fromCharCode(r[1])).join("") + "]", "g");
+const cleanText = s => String(s || "").replace(BAD, "").slice(0, MAXLEN);
+const cleanName = s => String(s || "").replace(BAD, "").replace(/\s+/g, " ").trim().slice(0, 20);
+const me = { uid: store.get("uid", null) || rid(12), name: store.get("name", ""), col: store.get("col", Math.floor(Math.random() * COLORS.length)) };
+store.set("uid", me.uid);
+const colorOf = c => COLORS[(Number(c) | 0) % COLORS.length] || COLORS[0];
+
+/* ---------- transports ---------- */
+const PEER_OPTS = { debug: 0 };
+function safeSend(c, m) { try { if (c && c.open) c.send(m); } catch (e) {} }
+
+// Live peer-to-peer room. The first person in a room hosts it; if the host leaves, someone else takes over and keeps the history.
+function p2pRoom(code, cb) {
+  const hostId = PREFIX + code.toLowerCase();
+  let peer = null, isHost = false, hostConn = null, alive = true, retryT = 0, hostLast = 0, attempts = 0;
+  let history = [];
+  const guests = new Map(); // peerId -> { conn, uid, name, col, typing, last }
+  let selfTyping = false;
+  const incoming = new Map(); // fid -> { from, n, parts, got }
+  function takeChunk(d, from) {
+    const f = incoming.get(d.fid);
+    if (!f || (from !== undefined && f.from !== from)) return false;
+    const i = d.i | 0;
+    if (typeof d.d !== "string" || d.d.length > CHUNK + 16 || i < 0 || i >= f.n || f.parts[i] !== undefined) return false;
+    f.parts[i] = d.d; f.got++;
+    cb.fileProgress(d.fid, f.got / f.n, false);
+    if (f.got === f.n) { incoming.delete(d.fid); cb.fileDone(d.fid, f.parts.join("")); }
+    return true;
+  }
+  function expect(fid, n, from) {
+    if (!fid || incoming.has(fid) || n < 1 || n > Math.ceil(LIVE_FILE_MAX * 1.4 / CHUNK) + 2) return false;
+    if (incoming.size > 12) incoming.delete(incoming.keys().next().value);
+    incoming.set(fid, { from, n, parts: new Array(n), got: 0 });
+    return true;
+  }
+  async function stream(fid, chunks, sendOne) {
+    for (let i = 0; i < chunks.length; i++) {
+      if (!alive) return;
+      sendOne(i);
+      cb.fileProgress(fid, (i + 1) / chunks.length, true);
+      if (i % 3 === 2) await sleep(25);
+    }
+  }
+  const keep = m => { if (history.some(x => x.id === m.id)) return false; history.push(m); history.sort((a, b) => a.t - b.t); if (history.length > 300) history.shift(); return true; };
+  function members() {
+    const seen = new Map([[me.uid, { uid: me.uid, name: me.name, col: me.col, typing: selfTyping }]]);
+    for (const g of guests.values()) if (g.uid && !seen.has(g.uid)) seen.set(g.uid, { uid: g.uid, name: g.name, col: g.col, typing: g.typing });
+    return [...seen.values()];
+  }
+  function bcast(msg) { for (const g of guests.values()) safeSend(g.conn, msg); }
+  function hostPres() { const m = members(); cb.presence(m); bcast({ t: "pres", members: m }); }
+  function hostAdd(m) { if (!keep(m)) return; cb.message(m); bcast({ t: "msg", m }); }
+  function clean(peerObj) { try { peerObj && peerObj.destroy(); } catch (e) {} }
+  function claim() {
+    if (!alive) return;
+    if (!window.Peer) { cb.status("off", "Couldn't load the connection library. Check your internet and reload."); retry(4000); return; }
+    cb.status("wait", attempts ? "Reconnecting…" : "Connecting…");
+    attempts++;
+    const p = new window.Peer(hostId, PEER_OPTS);
+    let settled = false;
+    p.on("open", () => {
+      settled = true;
+      if (!alive) { clean(p); return; }
+      peer = p; isHost = true; attempts = 0;
+      cb.status("ok", "Connected");
+      p.on("connection", conn => {
+        conn.on("open", () => { guests.set(conn.peer, { conn, uid: null, name: "", col: 0, typing: false, last: Date.now() }); });
+        conn.on("data", d => {
+          const g = guests.get(conn.peer); if (!g || !d || typeof d !== "object") return;
+          g.last = Date.now();
+          if (d.t === "hello") {
+            const first = !g.uid;
+            g.uid = String(d.uid || "").slice(0, 24) || rid(); g.name = cleanName(d.name) || "Someone"; g.col = Number(d.col) | 0; g.typing = !!d.typing;
+            if (first) safeSend(conn, { t: "init", history, members: members() });
+            hostPres();
+          } else if (d.t === "msg" && g.uid) {
+            const text = cleanText(d.text).trim(); if (!text) return;
+            if (Date.now() - (g.lastMsg || 0) < 250) return; g.lastMsg = Date.now();
+            hostAdd({ id: rid(14), uid: g.uid, name: g.name, col: g.col, text, t: Date.now(), cid: String(d.cid || "").slice(0, 20) });
+          } else if (d.t === "typing") { g.typing = !!d.v; hostPres(); }
+          else if (d.t === "fm" && g.uid) {
+            const f = normFile(d.file); if (!f || !f.fid || f.size > LIVE_FILE_MAX) return;
+            const n = d.n | 0;
+            if (!expect(f.fid, n, conn.peer)) return;
+            hostAdd({ id: rid(14), uid: g.uid, name: g.name, col: g.col, text: "", t: Date.now(), cid: "", file: f, n });
+          } else if (d.t === "fc") {
+            if (takeChunk(d, conn.peer)) for (const [pid, o] of guests) if (pid !== conn.peer) safeSend(o.conn, { t: "fc", fid: d.fid, i: d.i, d: d.d });
+          }
+        });
+        const gone = () => { if (guests.delete(conn.peer)) hostPres(); };
+        conn.on("close", gone); conn.on("error", gone);
+      });
+      p.on("disconnected", () => { if (alive) { try { p.reconnect(); } catch (e) {} } });
+      p.on("error", e => { if (e && (e.type === "network" || e.type === "server-error" || e.type === "socket-error")) cb.status("wait", "Reconnecting to the server…"); });
+      hostPres();
+      cb.history(history.slice());
+    });
+    p.on("error", e => {
+      if (settled) return; settled = true;
+      clean(p);
+      if (e && e.type === "unavailable-id") joinAsGuest();
+      else { cb.status("off", "Can't reach the connection server. Retrying…"); retry(3000); }
+    });
+  }
+  function joinAsGuest() {
+    if (!alive) return;
+    const p = new window.Peer(undefined, PEER_OPTS);
+    peer = p; isHost = false;
+    let settled = false;
+    const giveUp = setTimeout(() => { if (!settled) { settled = true; clean(p); cb.status("off", "Couldn't reach whoever has this room open. If that was you in another tab, close it. Retrying…"); retry(3000); } }, 10000);
+    p.on("open", () => {
+      const c = p.connect(hostId, { reliable: true, serialization: "json" });
+      c.on("open", () => {
+        if (settled) return; settled = true; clearTimeout(giveUp);
+        hostConn = c; hostLast = Date.now(); attempts = 0;
+        safeSend(c, { t: "hello", uid: me.uid, name: me.name, col: me.col, typing: selfTyping });
+        cb.status("ok", "Connected");
+      });
+      c.on("data", d => {
+        if (!d || typeof d !== "object") return;
+        hostLast = Date.now();
+        if (d.t === "init") { const hs = Array.isArray(d.history) ? d.history : []; for (const m of hs) if (m && m.id) keep(normMsg(m)); cb.history(history.slice()); if (Array.isArray(d.members)) cb.presence(d.members.map(normMember)); }
+        else if (d.t === "msg" && d.m) { const m = normMsg(d.m); if (m.file && m.uid !== me.uid) expect(m.file.fid, d.m.n | 0); if (keep(m)) cb.message(m); }
+        else if (d.t === "fc") takeChunk(d);
+        else if (d.t === "pres" && Array.isArray(d.members)) cb.presence(d.members.map(normMember));
+      });
+      const lost = () => { if (hostConn === c) hostLost(); };
+      c.on("close", lost); c.on("error", lost);
+    });
+    p.on("error", e => {
+      if (settled) { if (e && e.type === "peer-unavailable") hostLost(); return; }
+      settled = true; clearTimeout(giveUp); clean(p);
+      if (e && e.type === "peer-unavailable") retry(150 + Math.random() * 600); // the old host is gone: try to take over
+      else { cb.status("off", "Can't reach the connection server. Retrying…"); retry(3000); }
+    });
+  }
+  function hostLost() { if (!alive) return; hostConn = null; clean(peer); peer = null; cb.status("wait", "Reconnecting…"); retry(200 + Math.random() * 1200); }
+  function retry(ms) { clearTimeout(retryT); retryT = setTimeout(claim, ms); }
+  const beat = setInterval(() => {
+    if (!alive) return;
+    const now = Date.now();
+    if (isHost && peer) { for (const [id, g] of guests) { safeSend(g.conn, { t: "ping" }); if (now - g.last > 10000) { try { g.conn.close(); } catch (e) {} guests.delete(id); hostPres(); } } }
+    else if (hostConn) { safeSend(hostConn, { t: "ping" }); if (now - hostLast > 10000) hostLost(); }
+  }, 2000);
+  claim();
+  return {
+    saved: false,
+    send(text, cid) {
+      if (isHost && peer) { hostAdd({ id: rid(14), uid: me.uid, name: me.name, col: me.col, text, t: Date.now(), cid }); return true; }
+      if (hostConn && hostConn.open) { safeSend(hostConn, { t: "msg", text, cid }); return true; }
+      return false;
+    },
+    sendFile(meta, data) {
+      const chunks = []; for (let i = 0; i < data.length; i += CHUNK) chunks.push(data.slice(i, i + CHUNK));
+      const n = chunks.length;
+      if (isHost && peer) {
+        cb.fileDone(meta.fid, data);
+        hostAdd({ id: rid(14), uid: me.uid, name: me.name, col: me.col, text: "", t: Date.now(), cid: "", file: meta, n });
+        stream(meta.fid, chunks, i => bcast({ t: "fc", fid: meta.fid, i, d: chunks[i] }));
+        return true;
+      }
+      if (hostConn && hostConn.open) {
+        cb.fileDone(meta.fid, data);
+        safeSend(hostConn, { t: "fm", file: meta, n });
+        stream(meta.fid, chunks, i => safeSend(hostConn, { t: "fc", fid: meta.fid, i, d: chunks[i] }));
+        return true;
+      }
+      return false;
+    },
+    typing(v) { selfTyping = !!v; if (isHost && peer) hostPres(); else safeSend(hostConn, { t: "typing", v: selfTyping }); },
+    profile() { if (isHost && peer) hostPres(); else safeSend(hostConn, { t: "hello", uid: me.uid, name: me.name, col: me.col, typing: selfTyping }); },
+    leave() { alive = false; clearInterval(beat); clearTimeout(retryT); clean(peer); }
+  };
+}
+function normMsg(m) { return { id: String(m.id || rid()).slice(0, 40), uid: String(m.uid || "").slice(0, 24), name: cleanName(m.name) || "Someone", col: Number(m.col) | 0, text: cleanText(m.text), t: Number(m.t) || Date.now(), cid: m.cid ? String(m.cid).slice(0, 20) : "", file: normFile(m.file) }; }
+function normMember(m) { return { uid: String((m && m.uid) || "").slice(0, 24), name: cleanName(m && m.name) || "Someone", col: Number(m && m.col) | 0, typing: !!(m && m.typing) }; }
+
+// Saved rooms through Firebase Realtime Database.
+let fdb = null;
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+async function initFirebase() {
+  if (!FIREBASE_CONFIG) return false;
+  try {
+    await loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
+    await loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js");
+    if (!window.firebase.apps.length) window.firebase.initializeApp(FIREBASE_CONFIG);
+    fdb = window.firebase.database();
+    return true;
+  } catch (e) { console.error(e); toast("Couldn't load Firebase, so chat is live-only for now."); return false; }
+}
+function fbRoom(code, cb) {
+  const TS = window.firebase.database.ServerValue.TIMESTAMP;
+  const ref = fdb.ref("rooms/" + code);
+  const q = ref.child("messages").limitToLast(200);
+  const onAdd = q.on("child_added", s => { const v = s.val() || {}; const m = normMsg(Object.assign({}, v, { id: s.key })); if (m.file && typeof v.fdata === "string" && v.fdata.length < SAVED_FILE_MAX * 1.4) cb.fileDone(m.file.fid, v.fdata); cb.message(m); }, err => cb.status("off", "The database refused access. Check the database rules."));
+  const onChange = q.on("child_changed", s => { const v = s.val() || {}; cb.update(normMsg(Object.assign({}, v, { id: s.key }))); });
+  const onOnline = ref.child("online").on("value", s => { const v = s.val() || {}; cb.presence(Object.entries(v).map(([uid, o]) => normMember(Object.assign({}, o, { uid })))); });
+  const meRef = ref.child("online/" + me.uid);
+  const con = fdb.ref(".info/connected");
+  const onCon = con.on("value", s => {
+    if (s.val() === true) { meRef.onDisconnect().remove(); meRef.set({ name: me.name, col: me.col, typing: false, t: TS }).catch(() => {}); cb.status("ok", "Connected"); }
+    else cb.status("wait", "Reconnecting…");
+  });
+  setTimeout(() => cb.history(null), 0);
+  return {
+    saved: true,
+    send(text, cid) { ref.child("messages").push({ uid: me.uid, name: me.name, col: me.col, text, cid, t: TS }).catch(() => toast("That message didn't send. Check the database rules.")); return true; },
+    sendFile(meta, data) { if (meta.size > SAVED_FILE_MAX) return false; ref.child("messages").push({ uid: me.uid, name: me.name, col: me.col, text: "", cid: "", file: meta, fdata: data, t: TS }).catch(() => toast("That file didn't send. Check the database rules.")); return true; },
+    typing(v) { meRef.child("typing").set(!!v).catch(() => {}); },
+    profile() { meRef.update({ name: me.name, col: me.col }).catch(() => {}); },
+    leave() { q.off("child_added", onAdd); q.off("child_changed", onChange); ref.child("online").off("value", onOnline); con.off("value", onCon); meRef.onDisconnect().cancel(); meRef.remove().catch(() => {}); }
+  };
+}
+
+/* ---------- rooms state ---------- */
+const rooms = new Map(); // code -> room state
+let active = store.get("active", null);
+let useFirebase = false;
+function roomState(code) {
+  let r = rooms.get(code);
+  if (r) return r;
+  r = { code, msgs: [], ids: new Set(), byCid: new Map(), files: new Map(), members: [], unread: 0, status: "wait", statusText: "Connecting…", conn: null, ready: false, lastSeenMembers: null };
+  rooms.set(code, r);
+  r.conn = (useFirebase ? fbRoom : p2pRoom)(code, {
+    message: m => addMsg(r, m),
+    update: m => { const i = r.msgs.findIndex(x => x.id === m.id); if (i >= 0) { r.msgs[i] = m; if (code === active) renderMsgs(true); } },
+    history: hs => { if (hs) for (const m of hs) addMsg(r, m, true); r.ready = true; if (code === active) renderMsgs(true); renderRooms(); },
+    presence: list => setMembers(r, list),
+    fileProgress: (fid, p, mine) => { const f = r.files.get(fid) || {}; if (f.url) return; f.p = p; f.mine = mine; r.files.set(fid, f); if (code === active) scheduleRender(); },
+    fileDone: (fid, data) => { const f = r.files.get(fid) || {}; if (f.url) return; const m = r.msgs.find(x => x.file && x.file.fid === fid); f.data = data; f.p = 1; try { f.url = dataToUrl(data, m ? m.file.mime : (f.mime || "")); } catch (e) { f.err = true; } r.files.set(fid, f); if (code === active) scheduleRender(); },
+    status: (s, text) => { r.status = s; r.statusText = text; if (code === active) renderHead(); }
+  });
+  return r;
+}
+function saveRoomList() { store.set("rooms", [...rooms.keys()]); store.set("active", active); }
+function addMsg(r, m, quiet) {
+  if (!m || !m.id || r.ids.has(m.id)) return;
+  if (m.cid && m.uid === me.uid && r.byCid.has(m.cid)) { const p = r.byCid.get(m.cid); const i = r.msgs.indexOf(p); if (i >= 0) r.msgs.splice(i, 1); r.byCid.delete(m.cid); }
+  r.ids.add(m.id);
+  r.msgs.push(m);
+  if (m.file) { const f = r.files.get(m.file.fid); if (f && f.data && IMG_TYPES.has(m.file.mime) && !f.typed) { try { if (f.url) URL.revokeObjectURL(f.url); f.url = dataToUrl(f.data, m.file.mime); f.typed = true; } catch (e) {} } }
+  if (r.msgs.length > 1 && m.t < r.msgs[r.msgs.length - 2].t) r.msgs.sort((a, b) => a.t - b.t);
+  if (r.msgs.length > 400) { const old = r.msgs.shift(); r.ids.delete(old.id); }
+  const mine = m.uid === me.uid;
+  if (!quiet && r.ready && !mine && (r.code !== active || document.hidden)) { r.unread++; ding(); }
+  if (r.code === active) renderMsgs(false);
+  renderRooms(); updateTitle();
+}
+function dataToUrl(data, mime) {
+  const comma = data.indexOf(","), b64 = comma >= 0 ? data.slice(comma + 1) : data;
+  const bin = atob(b64), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return URL.createObjectURL(new Blob([u], { type: IMG_TYPES.has(mime) ? mime : "application/octet-stream" }));
+}
+let renderQ = 0;
+function scheduleRender() { if (renderQ) return; renderQ = setTimeout(() => { renderQ = 0; renderMsgs(false); renderRooms(); }, 120); }
+function setMembers(r, list) {
+  const prev = r.lastSeenMembers;
+  r.members = list;
+  if (prev && r.ready) {
+    // announce joins and leaves, but ignore brief drops (reconnects, host hand-offs)
+    const pu = new Set(prev.map(m => m.uid)), nu = new Set(list.map(m => m.uid));
+    r.away = r.away || new Map(); r.known = r.known || new Set(prev.map(m => m.uid));
+    for (const m of list) {
+      if (m.uid === me.uid) continue;
+      if (r.away.has(m.uid)) { clearTimeout(r.away.get(m.uid)); r.away.delete(m.uid); }
+      else if (!pu.has(m.uid) && !r.known.has(m.uid)) sysLine(r, `${m.name} joined`);
+      r.known.add(m.uid);
+    }
+    for (const m of prev) if (!nu.has(m.uid) && m.uid !== me.uid && !r.away.has(m.uid)) {
+      r.away.set(m.uid, setTimeout(() => { r.away.delete(m.uid); r.known.delete(m.uid); if (!r.members.some(x => x.uid === m.uid)) sysLine(r, `${m.name} left`); }, 6000));
+    }
+  }
+  r.lastSeenMembers = list;
+  if (r.code === active) { renderHead(); renderTyping(); }
+}
+function sysLine(r, text) { const m = { id: "sys-" + rid(), sys: true, text, t: Date.now() }; r.ids.add(m.id); r.msgs.push(m); if (r.code === active) renderMsgs(false); }
+
+/* ---------- rendering ---------- */
+const fmtTime = t => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+function fmtDay(t) {
+  const d = new Date(t), now = new Date(), y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === now.toDateString()) return "Today";
+  if (d.toDateString() === y.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+}
+const onlyEmoji = s => /^(\p{Extended_Pictographic}|\p{Emoji_Component}|‍|️|\s){1,12}$/u.test(s) && !/^[\d#*\s]+$/.test(s);
+function renderRooms() {
+  const box = $("rooms"); box.textContent = "";
+  if (!rooms.size) { const p = document.createElement("p"); p.style.cssText = "color:var(--rail-dim);font-size:13px;padding:8px 10px;margin:0;line-height:1.5"; p.textContent = "No rooms yet. Make one and send the code to your friends."; box.appendChild(p); }
+  for (const r of rooms.values()) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "room" + (r.code === active ? " on" : "");
+    const badge = document.createElement("span"); badge.className = "badge"; badge.style.background = COLORS[hashCode(r.code) % COLORS.length]; badge.textContent = r.code;
+    const mid = document.createElement("span");
+    const title = document.createElement("b"); title.textContent = "Room " + r.code;
+    const last = [...r.msgs].reverse().find(m => !m.sys);
+    const sm = document.createElement("small"); sm.textContent = last ? `${last.uid === me.uid ? "You" : last.name}: ${last.file ? "📎 " + last.file.name : last.text}` : `${r.members.length || 1} here`;
+    mid.append(title, sm);
+    b.append(badge, mid);
+    if (r.unread) { const u = document.createElement("span"); u.className = "unread"; u.textContent = r.unread > 99 ? "99+" : r.unread; b.appendChild(u); }
+    b.addEventListener("click", () => openRoom(r.code));
+    box.appendChild(b);
+  }
+}
+function hashCode(s) { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); }
+function renderHead() {
+  const r = rooms.get(active);
+  if (!r) return;
+  $("roomTitle").textContent = "Room " + r.code;
+  const dot = $("statusDot"); dot.className = "status" + (r.status === "ok" ? "" : r.status === "wait" ? " wait" : " off");
+  const n = r.members.length;
+  $("statusText").textContent = r.status === "ok" ? `${n || 1} here now` : r.statusText;
+  $("modeTag").textContent = r.conn && r.conn.saved ? "Saved" : "Live";
+  $("modeTag").title = r.conn && r.conn.saved ? "Messages are saved." : "Messages last while at least one person is in the room.";
+  const ppl = $("people"); ppl.textContent = "";
+  for (const m of r.members.slice(0, 6)) { const s = document.createElement("span"); s.style.background = colorOf(m.col); s.textContent = (m.name || "?").slice(0, 1).toUpperCase(); s.title = m.name + (m.uid === me.uid ? " (you)" : ""); ppl.appendChild(s); }
+}
+function renderTyping() {
+  const r = rooms.get(active), box = $("typing"); box.textContent = "";
+  if (!r) return;
+  const t = r.members.filter(m => m.typing && m.uid !== me.uid).map(m => m.name);
+  if (!t.length) return;
+  for (let i = 0; i < 3; i++) box.appendChild(document.createElement("i"));
+  box.appendChild(document.createTextNode(t.length === 1 ? `${t[0]} is typing` : t.length === 2 ? `${t[0]} and ${t[1]} are typing` : "Several people are typing"));
+}
+function renderMsgs(full) {
+  const r = rooms.get(active), box = $("msgs");
+  if (!r) return;
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+  box.textContent = "";
+  const real = r.msgs.filter(m => !m.sys);
+  if (!real.length) {
+    const e = document.createElement("div"); e.className = "empty";
+    const h = document.createElement("h3"); h.textContent = r.ready ? "Room's open" : "Opening the room…";
+    const p1 = document.createElement("p"); p1.textContent = "Send this code to friends so they can join:";
+    const c = document.createElement("span"); c.className = "code"; c.textContent = r.code;
+    const p2 = document.createElement("p"); p2.textContent = r.conn && r.conn.saved ? "Messages here are saved." : "Messages stay while at least one person has the room open.";
+    e.append(h, p1, c, p2);
+    for (const m of r.msgs) if (m.sys) { const s = document.createElement("div"); s.className = "sys"; s.textContent = m.text; e.appendChild(s); }
+    box.appendChild(e);
+    return;
+  }
+  let lastDay = "", group = null, gUid = null, gT = 0;
+  const endGroup = () => { if (group && group._last) { const tm = document.createElement("div"); tm.className = "time"; tm.textContent = fmtTime(group._last); group.appendChild(tm); } group = null; gUid = null; };
+  for (const m of r.msgs) {
+    const day = fmtDay(m.t);
+    if (day !== lastDay) { endGroup(); const d = document.createElement("div"); d.className = "day"; d.textContent = day; box.appendChild(d); lastDay = day; }
+    if (m.sys) { endGroup(); const s = document.createElement("div"); s.className = "sys"; s.textContent = m.text; box.appendChild(s); continue; }
+    if (!group || gUid !== m.uid || m.t - gT > 5 * 60 * 1000) {
+      endGroup();
+      group = document.createElement("div"); group.className = "group" + (m.uid === me.uid ? " mine" : "");
+      if (m.uid !== me.uid) { const w = document.createElement("div"); w.className = "who"; w.style.color = colorOf(m.col); w.textContent = m.name; group.appendChild(w); }
+      box.appendChild(group); gUid = m.uid;
+    }
+    gT = m.t; group._last = m.t;
+    const b = document.createElement("div"); b.className = "bub" + (m.pending ? " pending" : "") + (!m.file && onlyEmoji(m.text) ? " big" : "");
+    if (m.uid === me.uid) b.style.background = colorOf(me.col);
+    if (m.file) renderFile(b, r, m); else b.textContent = m.text;
+    b.title = fmtTime(m.t);
+    group.appendChild(b);
+  }
+  endGroup();
+  if (full || nearBottom || (r.msgs.length && r.msgs[r.msgs.length - 1].uid === me.uid)) box.scrollTop = box.scrollHeight;
+}
+function renderFile(b, r, m) {
+  const f = r.files.get(m.file.fid), isImg = IMG_TYPES.has(m.file.mime), mine = m.uid === me.uid;
+  if (f && f.url && isImg) {
+    b.classList.add("img");
+    const img = document.createElement("img"); img.src = f.url; img.alt = m.file.name; img.loading = "lazy";
+    img.addEventListener("load", () => { const box = $("msgs"); if (box.scrollHeight - box.scrollTop - box.clientHeight < 400) box.scrollTop = box.scrollHeight; });
+    img.addEventListener("click", () => { const a = document.createElement("a"); a.href = f.url; a.target = "_blank"; a.rel = "noopener"; a.click(); });
+    b.appendChild(img);
+    return;
+  }
+  const card = document.createElement("div"); card.className = "fcard";
+  const ic = document.createElement("span"); ic.className = "ic"; ic.textContent = isImg ? "🖼" : "📄";
+  const mid = document.createElement("div");
+  const nm = document.createElement("b"); nm.textContent = m.file.name;
+  const sm = document.createElement("small");
+  mid.append(nm, sm);
+  card.append(ic, mid);
+  if (f && f.url) {
+    sm.textContent = fmtSize(m.file.size);
+    const a = document.createElement("a"); a.href = f.url; a.download = m.file.name; a.textContent = "Download";
+    card.appendChild(a);
+  } else if (f && f.p !== undefined && f.p < 1) {
+    sm.textContent = `${fmtSize(m.file.size)} · ${f.mine || mine ? "Sending" : "Receiving"} ${Math.round(f.p * 100)}%`;
+    const bar = document.createElement("div"); bar.className = "bar"; const i = document.createElement("i"); i.style.width = Math.round(f.p * 100) + "%"; bar.appendChild(i); mid.appendChild(bar);
+  } else if (f && f.err) sm.textContent = `${fmtSize(m.file.size)} · Couldn't open this file`;
+  else sm.textContent = Date.now() - m.t < 30000 ? `${fmtSize(m.file.size)} · Waiting…` : `${fmtSize(m.file.size)} · Not available (sent before you joined)`;
+  b.appendChild(card);
+}
+async function shareFile(file) {
+  const r = rooms.get(active);
+  if (!r) { toast("Open a room first."); return; }
+  const max = r.conn.saved ? SAVED_FILE_MAX : LIVE_FILE_MAX;
+  if (file.size > max) { toast(`${file.name} is ${fmtSize(file.size)}. The limit is ${fmtSize(max)}.`); return; }
+  if (!file.size) { toast("That file is empty."); return; }
+  let data;
+  try { data = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.onerror = rej; fr.readAsDataURL(file); }); }
+  catch (e) { toast("Couldn't read that file."); return; }
+  const meta = { fid: rid(14), name: cleanFileName(file.name || "pasted-image.png"), size: file.size, mime: String(file.type || "").slice(0, 80) };
+  r.files.set(meta.fid, { mime: meta.mime });
+  if (!r.conn.sendFile(meta, data)) { r.files.delete(meta.fid); const n = $("notice"); n.textContent = "Not connected yet, so the file didn't send."; n.hidden = false; }
+}
+function renderFoot() {
+  $("railFoot").textContent = useFirebase
+    ? "Saved mode: messages are stored in your Firebase database."
+    : "Live mode: messages stay while someone is in the room. Works best on home Wi-Fi.";
+}
+function updateTitle() { let n = 0; for (const r of rooms.values()) n += r.unread; document.title = n ? `(${n}) Ping` : "Ping"; }
+function renderMe() { $("meDot").style.background = colorOf(me.col); $("meName").textContent = me.name || "You"; }
+
+/* ---------- actions ---------- */
+function openRoom(code) {
+  const r = roomState(code);
+  active = code; r.unread = 0;
+  saveRoomList();
+  $("app").classList.add("inroom");
+  renderRooms(); renderHead(); renderMsgs(true); renderTyping(); updateTitle();
+  $("notice").hidden = true;
+  setTimeout(() => $("input").focus(), 0);
+}
+function newRoom() {
+  let code; do { code = Array.from({ length: 4 }, () => LETTERS[Math.floor(Math.random() * LETTERS.length)]).join(""); } while (rooms.has(code));
+  openRoom(code);
+  toast(`Room ${code} is ready. Send the code to your friends.`);
+}
+function leaveRoom(code) {
+  const r = rooms.get(code); if (!r) return;
+  try { r.conn && r.conn.leave(); } catch (e) {}
+  for (const f of r.files.values()) if (f.url) try { URL.revokeObjectURL(f.url); } catch (e) {}
+  rooms.delete(code);
+  if (active === code) active = rooms.size ? [...rooms.keys()][0] : null;
+  saveRoomList();
+  if (active) openRoom(active); else { $("app").classList.remove("inroom"); renderRooms(); showEmptyConvo(); }
+}
+function showEmptyConvo() {
+  $("roomTitle").textContent = "No room open"; $("statusText").textContent = "Make or join a room to start chatting"; $("statusDot").className = "status wait";
+  $("people").textContent = ""; $("typing").textContent = "";
+  const box = $("msgs"); box.textContent = "";
+  const e = document.createElement("div"); e.className = "empty";
+  const h = document.createElement("h3"); h.textContent = "No room open";
+  const p = document.createElement("p"); p.textContent = "Make a new room or join one with a code.";
+  e.append(h, p); box.appendChild(e);
+}
+let lastSend = 0, typingT = 0, amTyping = false;
+function sendCurrent() {
+  const r = rooms.get(active); if (!r) return;
+  const input = $("input");
+  const text = cleanText(input.value).trim();
+  if (!text) return;
+  if (Date.now() - lastSend < 300) return;
+  const cid = rid(8);
+  const ok = r.conn.send(text, cid);
+  if (!ok) { const n = $("notice"); n.textContent = "Not connected yet, so that didn't send. Your message is still in the box."; n.hidden = false; return; }
+  lastSend = Date.now();
+  $("notice").hidden = true;
+  if (!r.conn.saved && !(r.status === "ok" && r.members.length && r.members[0].uid === me.uid)) {
+    const p = { id: "pending-" + cid, uid: me.uid, name: me.name, col: me.col, text, t: Date.now(), cid, pending: true };
+    r.byCid.set(cid, p); r.ids.add(p.id); r.msgs.push(p); renderMsgs(true);
+    setTimeout(() => { if (r.byCid.get(cid) === p) { const n = $("notice"); n.textContent = "A message may not have gone through. Check your connection."; n.hidden = false; } }, 8000);
+  }
+  input.value = ""; autoSize(); setTyping(false); $("sendBtn").disabled = true;
+}
+function setTyping(v) {
+  const r = rooms.get(active); if (!r) return;
+  if (v === amTyping) return;
+  amTyping = v; r.conn.typing(v);
+}
+function autoSize() { const t = $("input"); t.style.height = "auto"; t.style.height = Math.min(140, t.scrollHeight) + "px"; }
+let ac = null;
+function ding() {
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(880, t0); o.frequency.exponentialRampToValueAtTime(1320, t0 + 0.08);
+    g.gain.setValueAtTime(0.08, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.25);
+    o.connect(g); g.connect(ac.destination); o.start(t0); o.stop(t0 + 0.26);
+  } catch (e) {}
+}
+function toast(text) { const t = $("toast"); t.textContent = text; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, 3200); }
+
+/* ---------- wiring ---------- */
+$("composer").addEventListener("submit", e => { e.preventDefault(); sendCurrent(); });
+$("input").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendCurrent(); } });
+$("input").addEventListener("input", () => {
+  autoSize();
+  const has = $("input").value.trim().length > 0;
+  $("sendBtn").disabled = !has;
+  if (has) { setTyping(true); clearTimeout(typingT); typingT = setTimeout(() => setTyping(false), 3000); } else setTyping(false);
+});
+$("input").addEventListener("blur", () => setTyping(false));
+$("newBtn").addEventListener("click", newRoom);
+$("joinBtn").addEventListener("click", () => { $("joinErr").textContent = ""; $("codeIn").value = ""; $("joinDlg").hidden = false; $("codeIn").focus(); });
+$("joinCancel").addEventListener("click", () => { $("joinDlg").hidden = true; });
+$("codeIn").addEventListener("input", () => { $("codeIn").value = $("codeIn").value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4); });
+$("joinForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const code = $("codeIn").value.toUpperCase().replace(/[^A-Z]/g, "");
+  if (code.length !== 4) { $("joinErr").textContent = "Room codes are 4 letters."; return; }
+  $("joinDlg").hidden = true; openRoom(code);
+});
+$("backBtn").addEventListener("click", () => { $("app").classList.remove("inroom"); });
+$("leaveBtn").addEventListener("click", () => { if (active) leaveRoom(active); });
+$("inviteBtn").addEventListener("click", async () => {
+  if (!active) return;
+  const text = `Join my chat on Ping: ${location.href.split("#")[0]}#${active} (room code ${active})`;
+  try { await navigator.clipboard.writeText(text); toast("Invite copied. Paste it to your friends."); }
+  catch (e) { toast(`Room code: ${active}`); }
+});
+$("emojiBtn").addEventListener("click", () => { $("emojis").hidden = !$("emojis").hidden; });
+$("attachBtn").addEventListener("click", () => $("fileIn").click());
+$("fileIn").addEventListener("change", () => { const fs = [...($("fileIn").files || [])]; $("fileIn").value = ""; fs.slice(0, 5).forEach(shareFile); });
+$("input").addEventListener("paste", e => { const fs = [...((e.clipboardData && e.clipboardData.files) || [])]; if (fs.length) { e.preventDefault(); fs.slice(0, 5).forEach(shareFile); } });
+(() => {
+  const convo = document.querySelector(".convo"); let depth = 0;
+  const hasFiles = e => e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files");
+  convo.addEventListener("dragenter", e => { if (!hasFiles(e) || !active) return; depth++; $("dropHint").hidden = false; });
+  convo.addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
+  convo.addEventListener("dragleave", () => { depth = Math.max(0, depth - 1); if (!depth) $("dropHint").hidden = true; });
+  convo.addEventListener("drop", e => { if (!hasFiles(e)) return; e.preventDefault(); depth = 0; $("dropHint").hidden = true; [...e.dataTransfer.files].slice(0, 5).forEach(shareFile); });
+})();
+EMOJI.forEach(em => { const b = document.createElement("button"); b.type = "button"; b.textContent = em; b.addEventListener("click", () => { const t = $("input"); const s = t.selectionStart ?? t.value.length; t.value = (t.value.slice(0, s) + em + t.value.slice(s)).slice(0, MAXLEN); t.dispatchEvent(new Event("input")); $("emojis").hidden = true; t.focus(); }); $("emojis").appendChild(b); });
+document.addEventListener("click", e => { if (!$("emojis").hidden && !$("emojis").contains(e.target) && e.target !== $("emojiBtn")) $("emojis").hidden = true; });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && active) { const r = rooms.get(active); if (r) { r.unread = 0; renderRooms(); updateTitle(); } } });
+$("meBtn").addEventListener("click", () => openWelcome(true));
+COLORS.forEach((c, i) => { const b = document.createElement("button"); b.type = "button"; b.className = "sw"; b.style.background = c; b.setAttribute("aria-label", "Color " + (i + 1)); b.addEventListener("click", () => { pickCol = i; paintSwatches(); }); $("swatches").appendChild(b); });
+let pickCol = me.col;
+function paintSwatches() { [...$("swatches").children].forEach((b, i) => b.setAttribute("aria-pressed", String(i === pickCol))); }
+function openWelcome(edit) {
+  $("welcomeText").textContent = edit ? "Change how you show up in chats." : "Chat rooms for you and your friends. Pick a name, then make a room and share its code.";
+  $("welcomeGo").textContent = edit ? "Save" : "Continue";
+  $("nameIn").value = me.name; pickCol = me.col; paintSwatches(); $("welcomeErr").textContent = "";
+  $("welcome").hidden = false; $("nameIn").focus();
+}
+$("welcomeForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const n = cleanName($("nameIn").value);
+  if (!n) { $("welcomeErr").textContent = "Type a name first."; return; }
+  me.name = n; me.col = pickCol; store.set("name", n); store.set("col", pickCol);
+  $("welcome").hidden = true; renderMe();
+  for (const r of rooms.values()) r.conn && r.conn.profile();
+  if (active) { renderMsgs(true); renderHead(); }
+  if (!rooms.size) showEmptyConvo();
+});
+// Free the room when the page closes. Phones fire pagehide, not beforeunload, and a room left open in a dead tab blocks everyone else.
+const releaseAll = () => { for (const r of rooms.values()) { try { r.conn.leave(); } catch (e) {} } };
+window.addEventListener("beforeunload", releaseAll);
+window.addEventListener("pagehide", e => { if (!e.persisted) releaseAll(); else { for (const [code, r] of rooms) { try { r.conn.leave(); } catch (x) {} r.conn = null; r.suspended = true; } } });
+window.addEventListener("pageshow", e => { if (e.persisted) location.reload(); });
+
+/* ---------- start ---------- */
+(async function start() {
+  renderMe();
+  useFirebase = await initFirebase();
+  renderFoot();
+  const saved = store.get("rooms", []);
+  const fromHash = (location.hash || "").replace("#", "").toUpperCase().replace(/[^A-Z]/g, "");
+  for (const code of saved) if (/^[A-Z]{4}$/.test(code)) roomState(code);
+  if (!me.name) openWelcome(false);
+  if (fromHash.length === 4) openRoom(fromHash);
+  else if (active && rooms.has(active)) openRoom(active);
+  else if (rooms.size) openRoom([...rooms.keys()][0]);
+  else { renderRooms(); showEmptyConvo(); }
+  if (window.innerWidth <= 720 && !fromHash) $("app").classList.remove("inroom");
+})();
+window.__ping = { rooms, me, openRoom, sendCurrent, newRoom, leaveRoom };
+})();
+</script>
+</body>
+</html>
